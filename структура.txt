@@ -1,0 +1,32 @@
+telegram_gemini_bot/
+├── bot/
+│   ├── __init__.py
+│   ├── handlers.py        # Обработчики сообщений и команд
+│   ├── keyboards.py       # Генерация клавиатур
+│   └── middleware.py      # Middleware для авторизации
+├── config/
+│   ├── __init__.py
+│   └── settings.py        # Загрузка настроек из .env
+├── services/
+│   ├── __init__.py
+│   ├── database.py        # Работа с SQLite
+│   ├── file_handler.py    # Обработка файлов (txt, pdf, csv, xlsx)
+│   ├── gemini.py          # Взаимодействие с Google Gemini API
+│   ├── image_analyzer.py  # Анализ изображений (OCR, Gemini Vision)
+│   ├── speech.py          # Распознавание речи
+│   ├── translator.py      # Перевод текста
+│   ├── tts.py             # Генерация речи (Text-to-Speech)
+│   └── weather.py         # Получение прогноза погоды
+├── utils/
+│   ├── __init__.py
+│   ├── helpers.py         # Вспомогательные функции (очистка файлов и др.)
+│   └── logger.py          # Настройка логирования
+├── logs/                    # Директория для логов (создается автоматически)
+│   └── bot.log            # Файл логов
+├── temp/                    # Директория для временных файлов (создается автоматически)
+├── .env                     # Файл с секретами (API ключи, токен бота и т.д.) - ВАЖНО: добавить в .gitignore
+├── .gitignore
+├── main.py                  # Точка входа в приложение
+├── requirements.txt         # Список зависимостей Python
+├── Dockerfile               # Dockerfile для контейнеризации (опционально)
+└── README.md                # Инструкции и описание
