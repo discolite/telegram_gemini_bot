@@ -18,3 +18,8 @@ gTTS>=2.5.0
 # googletrans может быть нестабилен, используйте конкретную версию или форк при необходимости
 # googletrans==4.0.0rc1
 googletrans>4.0.0 # Попробуем последнюю доступную
+opencv-python-headless
+PyMuPDF
+xlrd
+python-pptx
+python-docx

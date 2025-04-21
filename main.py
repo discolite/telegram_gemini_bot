@@ -1,66 +1,128 @@
+# /home/telegram_gemini_bot/main.py
+
 import asyncio
 import sys
 from aiogram import Bot, Dispatcher, F
-from aiogram.client.default import DefaultBotProperties # Для установки parse_mode по умолчанию
-from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError, TelegramNetworkError # Добавим импорты ошибок
+import google.generativeai as genai # <--- Добавим импорт genai
 from loguru import logger
 
 from config import settings
-from utils.logger import log # Импортируем настроенный логгер
+# Убедимся, что log настроен и импортируется правильно
+if not hasattr(settings, 'LOGURU_CONFIGURED') or not settings.LOGURU_CONFIGURED:
+    try:
+        from utils.logger import setup_logging
+        setup_logging()
+        settings.LOGURU_CONFIGURED = True # Отмечаем, что настроили
+    except ImportError:
+         logger.warning("utils.logger not found, using basic loguru config.")
+         logger.add(sys.stderr, level="INFO") # Базовый вывод в stderr
+         settings.LOGURU_CONFIGURED = True
+
+
+# Импортируем остальные компоненты
 from services.database import init_db
-from bot.handlers import router as main_router # Импортируем роутер из handlers
-from bot.middleware import AuthMiddleware # Импортируем middleware
+from bot.handlers import router as main_router
+from bot.middleware import AuthMiddleware
+
 
 async def main():
-    # --- Initialization ---
-    log.info("Initializing bot...")
+    # --- Configuration Loading ---
+    logger.info("Configuration loaded successfully.")
 
-    # Initialize database
-    await init_db()
+    # --- Google Generative AI Configuration ---
+    try:
+        if settings.GOOGLE_API_KEY:
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+            logger.info("Google Generative AI configured successfully.")
+        else:
+            logger.warning("GOOGLE_API_KEY not found in settings. Google AI features may not work.")
+    except Exception as e:
+        logger.critical(f"Failed to configure Google Generative AI: {e}")
+        logger.exception(e)
+        # sys.exit(1) # Раскомментируйте, если Google AI критичен для запуска
 
-    # Initialize Bot
-    # Устанавливаем MarkdownV2 как режим парсинга по умолчанию для удобства
-    default_props = DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2)
-    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=default_props)
+    # --- Database Initialization ---
+    logger.info("Initializing database...")
+    try:
+        await init_db()
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.critical(f"Failed to initialize database: {e}")
+        logger.exception(e)
+        sys.exit(1) # База данных критична, выходим
 
-    # Initialize Dispatcher
+    # --- Bot and Dispatcher Initialization ---
+    logger.info("Initializing bot...")
+    try:
+        bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+        await bot.get_me()
+        logger.info("Bot instance created and token verified.")
+    except TelegramUnauthorizedError:
+        logger.critical("Invalid Telegram Bot Token. Please check your .env file.")
+        sys.exit(1)
+    except TelegramNetworkError as e:
+        logger.error(f"Network error during bot initialization (get_me): {e}. Check connection.")
+    except Exception as e:
+        logger.critical(f"Failed to initialize bot: {e}")
+        logger.exception(e)
+        sys.exit(1)
+
     dp = Dispatcher()
+    logger.info("Dispatcher instance created.")
 
     # --- Middleware ---
-    # Регистрируем middleware авторизации ПЕРЕД хэндлерами
-    # Он будет применяться ко всем апдейтам (сообщения, колбэки и т.д.)
     dp.update.outer_middleware(AuthMiddleware())
-    log.info("Authorization middleware registered.")
+    logger.info("Authorization middleware registered.")
 
     # --- Routers ---
     dp.include_router(main_router)
-    log.info("Main router included.")
+    logger.info("Main router included.")
 
     # --- Start Polling ---
-    log.info("Starting polling...")
-    # Перед запуском удалим вебхук, если он был установлен
-    await bot.delete_webhook(drop_pending_updates=True)
-
+    logger.info("Starting polling...")
     try:
-        await dp.start_polling(bot)
+        # Попытка удалить вебхук перед запуском
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("Webhook deleted (if existed).")
+        except TelegramUnauthorizedError:
+             logger.error("Failed to delete webhook: Invalid Token.")
+             sys.exit(1)
+        except TelegramNetworkError as e:
+             logger.warning(f"Network error deleting webhook: {e}. Continuing polling...")
+        except Exception as e:
+            logger.warning(f"Could not delete webhook: {e}. Continuing polling...")
+
+        # Запуск поллинга
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+
+    except TelegramUnauthorizedError:
+         logger.critical("Bot token became invalid during polling.")
     except Exception as e:
-        log.critical(f"Critical error during polling: {e}")
-        log.exception(e)
+        logger.critical(f"Critical error during polling: {e}")
+        logger.exception(e)
     finally:
-        log.warning("Bot stopped.")
-        await bot.session.close()
+        logger.warning("Bot stopped polling.")
+        # Корректное закрытие сессии бота
+        try:
+             if bot.session and not bot.session.closed:
+                 await bot.session.close()
+                 logger.info("Bot session closed.")
+        except Exception as close_err:
+             logger.error(f"Error closing bot session: {close_err}")
 
 
 if __name__ == "__main__":
-    # Проверка версии Python (опционально, но полезно)
-    if sys.version_info < (3, 10): # aiogram 3 требует Python 3.8+, но мы указали 3.11
-        log.error("Bot requires Python 3.10 or higher.")
+    if sys.version_info < (3, 10):
+        print("ERROR: Bot requires Python 3.10 or higher.", file=sys.stderr)
         sys.exit(1)
 
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        log.info("Bot stopped manually.")
+        logger.info("Bot stopped.")
     except Exception as e:
-         log.critical(f"Unhandled exception at top level: {e}")
-         log.exception(e)
+         logger.critical(f"Unhandled exception at top level: {e}")
+         logger.exception(e)
+         sys.exit(1)

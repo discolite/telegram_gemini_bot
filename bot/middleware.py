@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Any, Awaitable
+from typing import Callable, Dict, Any, Awaitable, Optional # <--- ИЗМЕНЕНИЕ: Добавлены импорты
 from aiogram import BaseMiddleware
 from aiogram.types import Update, Message, CallbackQuery, User
 from loguru import logger
@@ -11,46 +11,47 @@ class AuthMiddleware(BaseMiddleware):
     """
     async def __call__(
         self,
-        handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]], # Используются Callable, Dict, Any, Awaitable
         event: Update,
-        data: Dict[str, Any]
+        data: Dict[str, Any] # Используется Dict, Any
     ) -> Any:
 
         # Проверяем только для событий, у которых есть пользователь (Сообщения, Колбэки)
-        user: Optional[User] = None
-        chat_id: Optional[int] = None
+        user: Optional[User] = data.get('event_from_user') # Получаем пользователя из data (стандарт aiogram 3)
+        chat: Optional[Any] = data.get('event_chat') # Получаем чат из data
+        chat_id: Optional[int] = chat.id if chat else None
 
-        if isinstance(event, Message):
-            user = event.from_user
-            chat_id = event.chat.id
-        elif isinstance(event, CallbackQuery):
-            user = event.from_user
-            chat_id = event.message.chat.id if event.message else None
-        # Можно добавить другие типы event по необходимости (InlineQuery, etc.)
+        # Если пользователя нет в данных (некоторые типы обновлений), пропускаем
+        if not user:
+             # logger.debug(f"AuthMiddleware: No user found in event data ({type(event)}), skipping auth check.")
+             return await handler(event, data)
 
-        if user:
-            user_id = user.id
-            # Если список AUTHORIZED_USERS пуст, разрешаем всем (но выводим предупреждение при старте)
-            if not settings.AUTHORIZED_USERS:
-                 # logger.debug(f"AuthMiddleware: AUTHORIZED_USERS is empty, allowing user {user_id}")
-                 return await handler(event, data)
+        user_id = user.id
 
-            if user_id not in settings.AUTHORIZED_USERS:
-                logger.warning(f"Unauthorized access attempt by user {user_id} ({user.full_name or user.username})")
-                if chat_id:
-                    # Пытаемся отправить сообщение, если это возможно
-                    try:
-                        # Используем data['bot'], который должен быть доступен в middleware
-                        await data['bot'].send_message(chat_id, "⛔ Доступ запрещён.")
-                    except Exception as e:
-                         logger.error(f"Failed to send 'Access Denied' message to {chat_id}: {e}")
-                return # Прерываем обработку события
-            else:
-                # logger.debug(f"AuthMiddleware: User {user_id} is authorized.")
-                # Передаем user_id в data для удобства в хэндлерах
-                data['user_id'] = user_id
-                return await handler(event, data)
+        # Если список AUTHORIZED_USERS пуст в .env, разрешаем всем (но выводим предупреждение при старте)
+        if not settings.AUTHORIZED_USERS:
+             # logger.debug(f"AuthMiddleware: AUTHORIZED_USERS is empty, allowing user {user_id}")
+             # Добавляем user_id в data для хэндлеров, даже если авторизация отключена
+             data['user_id'] = user_id
+             return await handler(event, data)
+
+        # Проверяем авторизацию
+        if user_id not in settings.AUTHORIZED_USERS:
+            logger.warning(f"Unauthorized access attempt by user {user_id} ({user.full_name or user.username}) in chat {chat_id}")
+            if chat_id:
+                # Пытаемся отправить сообщение, если это возможно
+                try:
+                    # Используем data['bot'], который должен быть доступен в middleware
+                    bot = data.get('bot')
+                    if bot:
+                        await bot.send_message(chat_id, "⛔ Доступ запрещён.")
+                    else:
+                        logger.error("Bot instance not found in middleware data to send 'Access Denied' message.")
+                except Exception as e:
+                     logger.error(f"Failed to send 'Access Denied' message to {chat_id}: {e}")
+            return # Прерываем обработку события
         else:
-            # Если событие не содержит информации о пользователе, пропускаем проверку
-            # logger.debug(f"AuthMiddleware: Event type {type(event)} does not have user info, skipping auth check.")
+            # logger.debug(f"AuthMiddleware: User {user_id} is authorized.")
+            # Передаем user_id в data для удобства в хэндлерах
+            data['user_id'] = user_id
             return await handler(event, data)
