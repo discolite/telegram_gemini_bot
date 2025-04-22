@@ -2,13 +2,14 @@
 
 import asyncio
 import os
+# import subprocess # <<< УДАЛЕН НЕНУЖНЫЙ ИМПОРТ >>>
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message, CallbackQuery, FSInputFile, InputFile, User
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 from loguru import logger
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple # <<< Добавил Tuple для аннотации run_shell_command >>>
 from pathlib import Path
 
 # Импортируем настройки и сервисы
@@ -17,8 +18,8 @@ from services import (
     gemini,
     weather,
     speech,
-    image_analyzer, # Используется для анализа фото
-    file_handler,   # Используется для анализа документов
+    image_analyzer,
+    file_handler,
     database,
     tts,
     translator,
@@ -28,7 +29,7 @@ from utils.helpers import (
     get_temp_filepath,
     cleanup_temp_file,
     escape_markdown_v2,
-    is_ocr_potentially_useful # Функция остается, т.к. OCR используется для логов/истории
+    is_ocr_potentially_useful
 )
 # Импортируем клавиатуры
 from .keyboards import get_mood_keyboard
@@ -45,6 +46,16 @@ def get_user_id(message: Optional[Message] = None, callback_query: Optional[Call
     logger.warning("Could not extract user_id from event.")
     return None
 
+# --- Вспомогательная функция для проверки прав админа ---
+def is_admin(user_id: int) -> bool:
+    """Checks if the user ID is in the authorized list."""
+    # Убедимся, что AUTHORIZED_USERS существует и является списком/кортежем
+    auth_list = getattr(settings, 'AUTHORIZED_USERS', [])
+    if not isinstance(auth_list, (list, tuple)):
+        logger.error("settings.AUTHORIZED_USERS is not a list or tuple.")
+        return False
+    return user_id in auth_list
+
 # --- Command Handlers ---
 
 @router.message(Command("start", "help"))
@@ -53,24 +64,56 @@ async def handle_start(message: Message):
     user_id = get_user_id(message=message)
     if not user_id: return
     user_name = message.from_user.full_name if message.from_user else "Пользователь"
-    await database.get_user_settings(user_id) # Инициализируем или получаем настройки
+    await database.get_user_settings(user_id)
+
+    # Экранируем скобки () для MarkdownV2
     help_text = (
         f"Привет, {escape_markdown_v2(user_name)}\!\n\n"
         "Я многофункциональный AI\-бот\. Вот что я умею:\n\n"
-        "🧠 **Общение:** Просто напиши мне, и я отвечу с помощью Google Gemini\. Можешь спросить погоду, написав `погода <город>`\.\n" # Обновил текст
+        "🧠 **Общение:** Просто напиши мне, и я отвечу с помощью Google Gemini\. Можешь спросить погоду, написав `погода <город>`\.\n"
         "🗣️ **Голосовые сообщения:** Отправь мне голосовое, я его распознаю и отвечу\.\n"
-        "🖼️ **Анализ изображений:** Отправь картинку, я опишу её с помощью Gemini Vision \(текст с картинки не выводится\)\.\n"
+        "🖼️ **Анализ изображений:** Отправь картинку, я опишу её с помощью Gemini Vision \\(текст с картинки не выводится\\)\.\n"
         "📄 **Обработка файлов:** Отправь \.txt, \.pdf, \.csv, \.xlsx или \.docx, и я проанализирую содержимое\.\n"
-        "☀️ **Погода (команда):** `/weather <город>` \(по умолчанию Москва\)\.\n"
-        "🎭 **Стиль общения:** `/mood` \- выбери мой стиль \(дружелюбный, проф\., саркастичный\)\.\n"
+        "☀️ **Погода \\(команда\\):** `/weather <город>` \\(по умолчанию Москва\\)\.\n"
+        "🎭 **Стиль общения:** `/mood` \- выбери мой стиль \\(дружелюбный, проф\., саркастичный\\)\.\n"
         "🔊 **Озвучка:** \n"
         "   \- `/speak <текст>` \- озвучу твой текст\.\n"
         "   \- `/toggle_speak` \- вкл/выкл озвучку моих ответов\.\n"
-        "🌐 **Перевод:** `/translate <текст> [язык]` \(напр\., `/translate hello ru`\)\. Я также могу переводить через Gemini \(попроси меня\)\.\n\n"
+        "🌐 **Перевод:** `/translate <текст> [язык]` \\(напр\., `/translate hello ru`\\)\. Я также могу переводить через Gemini \\(попроси меня\\)\.\n\n"
         f"Твой ID: `{user_id}`\n"
         "Настройки хранятся для каждого пользователя\."
     )
-    await message.answer(help_text, parse_mode="MarkdownV2")
+    if is_admin(user_id):
+        help_text += "\n\n**Админ\-команды:**\n`/admin` `/status` `/restart`"
+
+    try:
+        await message.answer(help_text, parse_mode="MarkdownV2")
+    except TelegramBadRequest as e:
+        logger.error(f"Failed to send help message with MarkdownV2: {e}")
+        help_text_plain = ( # Версия без MarkdownV2
+            f"Привет, {user_name}!\n\n"
+            "Я многофункциональный AI-бот. Вот что я умею:\n\n"
+            "Общение: Просто напиши мне, и я отвечу с помощью Google Gemini. Можешь спросить погоду, написав 'погода <город>'.\n"
+            "Голосовые сообщения: Отправь мне голосовое, я его распознаю и отвечу.\n"
+            "Анализ изображений: Отправь картинку, я опишу её с помощью Gemini Vision (текст с картинки не выводится).\n"
+            "Обработка файлов: Отправь .txt, .pdf, .csv, .xlsx или .docx, и я проанализирую содержимое.\n"
+            "Погода (команда): /weather <город> (по умолчанию Москва).\n"
+            "Стиль общения: /mood - выбери мой стиль (дружелюбный, проф., саркастичный).\n"
+            "Озвучка: \n"
+            "   - /speak <текст> - озвучу твой текст.\n"
+            "   - /toggle_speak - вкл/выкл озвучку моих ответов.\n"
+            "Перевод: /translate <текст> [язык] (напр., /translate hello ru). Я также могу переводить через Gemini (попроси меня).\n\n"
+            f"Твой ID: {user_id}\n"
+            "Настройки хранятся для каждого пользователя."
+        )
+        if is_admin(user_id):
+             help_text_plain += "\n\nАдмин-команды:\n/admin /status /restart"
+        try:
+            await message.answer(help_text_plain, parse_mode=None)
+            logger.info("Sent help message without Markdown as fallback.")
+        except Exception as fallback_e:
+            logger.error(f"Failed to send plain help message: {fallback_e}")
+
 
 @router.message(Command("weather"))
 async def handle_weather(message: Message, command: CommandObject, bot: Bot):
@@ -220,6 +263,188 @@ async def handle_translate(message: Message, command: CommandObject, bot: Bot):
         fail_message = translated_text if translated_text else "Не удалось выполнить перевод."
         await bot.edit_message_text(fail_message, chat_id=processing_msg.chat.id, message_id=processing_msg.message_id, parse_mode=None)
 
+
+# ===========================================
+# === НОВЫЕ АДМИНСКИЕ КОМАНДЫ НАЧИНАЮТСЯ ===
+# ===========================================
+
+@router.message(Command("admin"))
+async def handle_admin(message: Message):
+    """Handles /admin command (admins only)."""
+    user_id = get_user_id(message=message)
+    # Проверка прав администратора
+    if not user_id or not is_admin(user_id):
+        logger.warning(f"Unauthorized attempt to use /admin by user {user_id or 'unknown'}")
+        # Обычно middleware уже блокирует, но можно и явно ничего не отвечать
+        return
+
+    logger.info(f"Admin command executed by user {user_id}")
+    admin_info = f"🛠️ *Админ\-панель*\n\n"
+
+    # Список авторизованных пользователей
+    auth_users_list = getattr(settings, 'AUTHORIZED_USERS', [])
+    if isinstance(auth_users_list, (list, tuple)) and auth_users_list:
+        auth_users_str = ', '.join(map(str, auth_users_list))
+    else:
+        auth_users_str = '_Список пуст или не задан_'
+    admin_info += f"🔑 **Авторизованные пользователи:**\n`{escape_markdown_v2(auth_users_str)}`\n\n"
+
+    # Дополнительная информация (можно расширить)
+    admin_info += "✅ Сервис бота активен \(проверено запуском этой команды\)\. Для деталей используйте `/status`\."
+
+    try:
+        await message.reply(admin_info, parse_mode="MarkdownV2")
+    except TelegramBadRequest as e:
+         logger.error(f"Failed to send admin info with MarkdownV2: {e}")
+         # Fallback без разметки
+         admin_info_plain = f"Админ-панель\n\n"
+         admin_info_plain += f"Авторизованные пользователи:\n{auth_users_str}\n\n"
+         admin_info_plain += "Сервис бота активен. Для деталей используйте /status."
+         try:
+             await message.reply(admin_info_plain, parse_mode=None)
+         except Exception as plain_e:
+              logger.error(f"Failed to send plain admin info: {plain_e}")
+
+
+async def run_shell_command(command: str) -> Tuple[str, str, int]:
+    """Executes a shell command asynchronously and returns output."""
+    logger.debug(f"Running shell command: {command}")
+    proc = await asyncio.create_subprocess_shell(
+        command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await proc.communicate()
+    exit_code = proc.returncode
+    logger.debug(f"Command '{command}' finished with exit code {exit_code}")
+    return stdout.decode(errors='ignore'), stderr.decode(errors='ignore'), exit_code
+
+
+@router.message(Command("status"))
+async def handle_status(message: Message, bot: Bot): # Добавил bot, т.к. используется bot.edit_message_text
+    """Handles /status command (admins only). Gets systemd service status."""
+    user_id = get_user_id(message=message)
+    if not user_id or not is_admin(user_id):
+        logger.warning(f"Unauthorized attempt to use /status by user {user_id or 'unknown'}")
+        return
+
+    logger.info(f"Status command executed by user {user_id}")
+    # Имя сервиса systemd (должно совпадать с именем файла .service)
+    service_name = "telegram_gemini_bot.service"
+    processing_msg = await message.reply(f"Получаю статус сервиса `{escape_markdown_v2(service_name)}`...", parse_mode="MarkdownV2")
+
+    command = f"systemctl status {service_name}"
+    output_parts = [f"`{command}`"]
+    try:
+        stdout, stderr, exit_code = await run_shell_command(command)
+
+        output_parts.append(f"Код выхода: `{exit_code}`")
+
+        max_lines = 15 # Ограничиваем вывод для Telegram
+        if stdout:
+             stdout_lines = stdout.strip().splitlines()
+             stdout_limited = "\n".join(stdout_lines[-max_lines:])
+             if len(stdout_lines) > max_lines:
+                 stdout_limited = "... (начало урезано)\n" + stdout_limited
+             # Экранируем содержимое для блока кода MarkdownV2
+             escaped_stdout = escape_markdown_v2(stdout_limited)
+             output_parts.append(f"**Stdout:**\n```\n{escaped_stdout}\n```")
+        if stderr:
+             stderr_lines = stderr.strip().splitlines()
+             stderr_limited = "\n".join(stderr_lines[-max_lines:])
+             if len(stderr_lines) > max_lines:
+                 stderr_limited = "... (начало урезано)\n" + stderr_limited
+             escaped_stderr = escape_markdown_v2(stderr_limited)
+             output_parts.append(f"**Stderr:**\n```\n{escaped_stderr}\n```")
+
+        if not stdout and not stderr and exit_code == 0: # Уточняем случай пустого вывода
+             output_parts.append("_(Команда выполнена успешно, но не вернула вывод)_")
+        elif not stdout and not stderr and exit_code != 0:
+             output_parts.append("_(Команда не вернула вывод, код выхода не 0)_")
+
+
+    except FileNotFoundError:
+         logger.error(f"Command 'systemctl' not found.")
+         output_parts.append("\n❌ Ошибка: команда `systemctl` не найдена на сервере.")
+    except Exception as e:
+        logger.error(f"Error executing status command '{command}': {e}")
+        output_parts.append(f"\n❌ Ошибка при выполнении команды: {escape_markdown_v2(str(e))}")
+
+    final_output = "\n\n".join(output_parts)
+    max_telegram_len = 4090
+    if len(final_output) > max_telegram_len:
+        final_output = final_output[:max_telegram_len] + "\n\n✂️ _Вывод был урезан_"
+
+    try:
+        await bot.edit_message_text(final_output,
+                                    chat_id=processing_msg.chat.id,
+                                    message_id=processing_msg.message_id,
+                                    parse_mode="MarkdownV2",
+                                    disable_web_page_preview=True)
+    except TelegramBadRequest as e:
+         logger.error(f"Error editing status message with MarkdownV2: {e}. Falling back to plain text.")
+         try:
+             # Формируем простой текст без Markdown
+             plain_output_parts = [f"Команда: {command}"]
+             if 'exit_code' in locals(): plain_output_parts.append(f"Код выхода: {exit_code}")
+             if 'stdout_limited' in locals() and stdout_limited: plain_output_parts.append(f"Stdout:\n{stdout_limited}")
+             if 'stderr_limited' in locals() and stderr_limited: plain_output_parts.append(f"Stderr:\n{stderr_limited}")
+             if 'stdout' in locals() and 'stderr' in locals() and not stdout and not stderr:
+                 if 'exit_code' in locals() and exit_code == 0: plain_output_parts.append("(Команда выполнена успешно, но не вернула вывод)")
+                 else: plain_output_parts.append("(Команда не вернула вывод)")
+             plain_output = "\n\n".join(plain_output_parts)
+
+             if len(plain_output) > max_telegram_len:
+                 plain_output = plain_output[:max_telegram_len] + "\n\n...Вывод был урезан"
+             await bot.edit_message_text(plain_output,
+                                         chat_id=processing_msg.chat.id,
+                                         message_id=processing_msg.message_id,
+                                         parse_mode=None,
+                                         disable_web_page_preview=True)
+         except Exception as fallback_e:
+              logger.error(f"Failed to send plain status info: {fallback_e}")
+
+
+@router.message(Command("restart"))
+async def handle_restart(message: Message):
+    """Handles /restart command (admins only). Restarts systemd service."""
+    user_id = get_user_id(message=message)
+    if not user_id or not is_admin(user_id):
+        logger.warning(f"Unauthorized attempt to use /restart by user {user_id or 'unknown'}")
+        return
+
+    logger.info(f"Restart command executed by user {user_id}")
+    service_name = "telegram_gemini_bot.service"
+    # Отправляем сообщение ДО выполнения команды
+    try:
+        await message.reply(f"⚠️ Отправляю команду перезапуска сервиса `{escape_markdown_v2(service_name)}`\.\.\.\n"
+                            "Бот будет перезапущен\. Ответ от `systemctl` может не прийти\.", parse_mode="MarkdownV2")
+    except Exception as reply_e:
+         logger.error(f"Failed to send restart confirmation message: {reply_e}")
+         # Все равно пробуем перезапустить
+
+    command = f"systemctl restart {service_name}"
+    try:
+        proc = await asyncio.create_subprocess_shell(command)
+        # Не ждем завершения, просто логируем запуск
+        logger.info(f"Launched command '{command}' (PID: {proc.pid}). Service should restart shortly.")
+        # Даем systemd немного времени
+        await asyncio.sleep(1)
+    except FileNotFoundError:
+         logger.error(f"Command 'systemctl' not found. Cannot restart service.")
+         # Попытка отправить сообщение об ошибке, но может не успеть
+         try: await message.answer("❌ Ошибка: команда `systemctl` не найдена.", parse_mode="MarkdownV2")
+         except Exception: pass
+    except Exception as e:
+        logger.error(f"Error launching restart command '{command}': {e}")
+        try: await message.answer("❌ Ошибка при запуске команды перезапуска.", parse_mode=None)
+        except Exception: pass
+
+# =========================================
+# === НОВЫЕ АДМИНСКИЕ КОМАНДЫ КОНЧАЮТСЯ ===
+# =========================================
+
+
 # --- Callback Query Handlers ---
 
 @router.callback_query(F.data.startswith("set_mood:"))
@@ -360,7 +585,7 @@ async def handle_photo_message(message: Message, bot: Bot):
 
     # Формирование и отправка ответа
     final_response = "\n\n".join(response_parts).strip()
-    parse_mode_final: Optional[str] = "MarkdownV2" # Всегда используем Markdown, т.к. есть или Vision или сообщение об ошибке в курсиве
+    parse_mode_final: Optional[str] = "MarkdownV2"
 
     try:
         await message.reply(final_response, parse_mode=parse_mode_final, disable_web_page_preview=True)
@@ -403,6 +628,7 @@ async def handle_document_message(message: Message, bot: Bot):
     mime_type = doc.mime_type
     file_size = doc.file_size if doc.file_size else 0
     file_id = doc.file_id
+    file_ext = filename.split('.')[-1].lower() if '.' in filename else None
 
     logger.info(f"Received document '{filename}' from user {user_id} (Type: {mime_type}, Size: {file_size})")
     processing_msg = await message.reply(f"Получил файл '{escape_markdown_v2(filename)}'. Обрабатываю...", parse_mode=None)
@@ -445,8 +671,6 @@ async def handle_document_message(message: Message, bot: Bot):
         if analysis_result:
             response_parts.append(f"**Анализ содержимого \(Gemini\):**\n{escape_markdown_v2(analysis_result)}")
             model_history_message += f" [Анализ Gemini: {analysis_result[:150]}...]"
-        # Не добавляем доп. сообщение, если анализ не удался, т.к. статус уже это отражает
-        # (например, "Не удалось получить анализ содержимого от AI.")
 
         final_response = "\n\n".join(response_parts).strip()
         await database.add_message(user_id, 'user', user_history_message)
@@ -467,7 +691,6 @@ async def handle_document_message(message: Message, bot: Bot):
         await database.add_message(user_id, 'model', "[Критическая ошибка обработки файла]")
 
 # --- Обработчик Текстовых Сообщений ---
-# <<< ИЗМЕНЕНИЕ: Добавлена проверка на "погода <город>" >>>
 @router.message(F.text)
 async def handle_text_message(message: Message, bot: Bot):
     """
