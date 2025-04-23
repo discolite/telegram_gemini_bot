@@ -21,7 +21,7 @@ from services import (
     image_analyzer,
     file_handler,
     database,
-    tts,
+    tts,  # <-- Убеждаемся, что tts импортирован
     translator,
 )
 # Импортируем хелперы
@@ -76,10 +76,12 @@ async def handle_start(message: Message):
         "📄 **Обработка файлов:** Отправь \.txt, \.pdf, \.csv, \.xlsx или \.docx, и я проанализирую содержимое\.\n"
         "☀️ **Погода \\(команда\\):** `/weather <город>` \\(по умолчанию Москва\\)\.\n"
         "🎭 **Стиль общения:** `/mood` \- выбери мой стиль \\(дружелюбный, проф\., саркастичный\\)\.\n"
-        "🔊 **Озвучка:** \n"
-        "   \- `/speak <текст>` \- озвучу твой текст\.\n"
-        "   \- `/toggle_speak` \- вкл/выкл озвучку моих ответов\.\n"
-        "🌐 **Перевод:** `/translate <текст> [язык]` \\(напр\., `/translate hello ru`\\)\. Я также могу переводить через Gemini \\(попроси меня\\)\.\n\n"
+        # --- ИЗМЕНЕНИЯ В СПРАВКЕ ---
+        "🌐 **Перевод и Озвучка:**\n"
+        "   \- Попроси меня **перевести** текст \\(напр\., `переведи 'hello' на немецкий`\\)\.\n"
+        "   \- Попроси меня **озвучить** текст \\(напр\., `озвучь 'привет мир'` или `скажи 'я бот'`\\)\.\n"
+        "   \- `/toggle_speak` \- вкл/выкл автоматическую озвучку моих ответов\.\n\n"
+        # --- КОНЕЦ ИЗМЕНЕНИЙ В СПРАВКЕ ---
         f"Твой ID: `{user_id}`\n"
         "Настройки хранятся для каждого пользователя\."
     )
@@ -99,10 +101,12 @@ async def handle_start(message: Message):
             "Обработка файлов: Отправь .txt, .pdf, .csv, .xlsx или .docx, и я проанализирую содержимое.\n"
             "Погода (команда): /weather <город> (по умолчанию Москва).\n"
             "Стиль общения: /mood - выбери мой стиль (дружелюбный, проф., саркастичный).\n"
-            "Озвучка: \n"
-            "   - /speak <текст> - озвучу твой текст.\n"
-            "   - /toggle_speak - вкл/выкл озвучку моих ответов.\n"
-            "Перевод: /translate <текст> [язык] (напр., /translate hello ru). Я также могу переводить через Gemini (попроси меня).\n\n"
+            # --- ИЗМЕНЕНИЯ В СПРАВКЕ (Plain Text) ---
+            "Перевод и Озвучка:\n"
+            "   - Попроси меня перевести текст (напр., `переведи 'hello' на немецкий`).\n"
+            "   - Попроси меня озвучить текст (напр., `озвучь 'привет мир'` или `скажи 'я бот'`).\n"
+            "   - /toggle_speak - вкл/выкл автоматическую озвучку моих ответов.\n\n"
+            # --- КОНЕЦ ИЗМЕНЕНИЙ В СПРАВКЕ (Plain Text) ---
             f"Твой ID: {user_id}\n"
             "Настройки хранятся для каждого пользователя."
         )
@@ -158,36 +162,7 @@ async def handle_mood(message: Message):
     current_mood = settings_data.get('mood', settings.DEFAULT_MOOD)
     await message.answer(f"Выбери мой стиль общения\. Текущий: `{escape_markdown_v2(current_mood)}`", reply_markup=get_mood_keyboard(), parse_mode="MarkdownV2")
 
-@router.message(Command("speak"))
-async def handle_speak(message: Message, command: CommandObject, bot: Bot):
-    """Handles /speak command for TTS."""
-    user_id = get_user_id(message=message)
-    if not user_id: return
-    text_to_speak = command.args
-    if not text_to_speak:
-        await message.answer("Пожалуйста, укажи текст для озвучивания после команды `/speak`\.", parse_mode="MarkdownV2")
-        return
-
-    logger.info(f"User {user_id} requested to speak: '{text_to_speak[:50]}...'")
-    processing_msg = await message.answer("Генерирую аудио...", parse_mode=None)
-    audio_path: Optional[Path] = None
-    try:
-        audio_path = await tts.generate_speech(text_to_speak)
-        if audio_path:
-            audio_input = FSInputFile(audio_path)
-            await message.reply_voice(voice=audio_input)
-            try: await bot.delete_message(chat_id=processing_msg.chat.id, message_id=processing_msg.message_id)
-            except TelegramBadRequest as del_e: logger.warning(f"Could not delete 'generating audio' message: {del_e}")
-            logger.info(f"Sent generated voice message for /speak to {user_id}")
-        else:
-            logger.error(f"Failed to generate speech for /speak for user {user_id}")
-            await bot.edit_message_text("Не удалось сгенерировать аудио.", chat_id=processing_msg.chat.id, message_id=processing_msg.message_id, parse_mode=None)
-    except Exception as send_err:
-        logger.error(f"Error handling /speak for user {user_id}: {send_err}")
-        await bot.edit_message_text("Ошибка при отправке аудио.", chat_id=processing_msg.chat.id, message_id=processing_msg.message_id, parse_mode=None)
-    finally:
-        if audio_path:
-            await cleanup_temp_file(audio_path)
+# <<< ФУНКЦИЯ handle_speak УДАЛЕНА >>>
 
 @router.message(Command("toggle_speak"))
 async def handle_toggle_speak(message: Message):
@@ -199,69 +174,7 @@ async def handle_toggle_speak(message: Message):
     logger.info(f"User {user_id} toggled speak mode to {state_text}")
     await message.answer(f"🔊 Озвучка моих ответов теперь **{state_text}**\.", parse_mode="MarkdownV2")
 
-@router.message(Command("translate"))
-async def handle_translate(message: Message, command: CommandObject, bot: Bot):
-    """Handles /translate command."""
-    user_id = get_user_id(message=message)
-    if not user_id: return
-    if not command.args:
-        await message.answer("Использование: `/translate <текст> [код\_языка]`\nПример: `/translate Привет мир en`", parse_mode="MarkdownV2")
-        return
-
-    args_list = command.args.split()
-    target_lang = 'ru' # По умолчанию русский
-    text_to_translate = ""
-    notification_message = None
-
-    if len(args_list) >= 2:
-        potential_lang = args_list[-1].lower()
-        lang_code = translator.get_lang_code(potential_lang)
-        if lang_code and (len(potential_lang) <= 3 or lang_code != potential_lang):
-            target_lang = lang_code
-            text_to_translate = " ".join(args_list[:-1])
-            logger.info(f"User {user_id} requested translation to '{target_lang}'. Original lang input: '{potential_lang}'. Text: '{text_to_translate[:50]}...'")
-        else:
-            text_to_translate = command.args
-            notification_message = f"Код языка не указан или не распознан, перевожу на русский ('ru')"
-            logger.info(f"User {user_id} requested translation (defaulting to 'ru'). Text: '{text_to_translate[:50]}...'")
-    else:
-         text_to_translate = command.args
-         notification_message = f"Код языка не указан, перевожу на русский ('ru')"
-         logger.info(f"User {user_id} requested translation (defaulting to 'ru'). Text: '{text_to_translate[:50]}...'")
-
-    if not text_to_translate:
-         await message.answer("Не указан текст для перевода.", parse_mode=None)
-         return
-
-    if notification_message:
-        await message.answer(notification_message, parse_mode=None)
-
-    processing_msg = await message.answer(f"Перевожу на язык '{target_lang}'...", parse_mode=None)
-    translated_text = await translator.translate_text_googletrans(text_to_translate, target_lang)
-
-    if translated_text and "ошибка" not in translated_text.lower() and "error" not in translated_text.lower():
-        response_text = (f"**Оригинал:**\n{escape_markdown_v2(text_to_translate)}\n\n"
-                         f"**Перевод ({target_lang}):**\n{escape_markdown_v2(translated_text)}")
-        try:
-            await bot.edit_message_text(response_text, chat_id=processing_msg.chat.id, message_id=processing_msg.message_id, parse_mode="MarkdownV2")
-        except TelegramBadRequest as e:
-             if "message is not modified" not in str(e):
-                 logger.error(f"Error editing translation message (MarkdownV2): {e}")
-                 try:
-                     fallback_text = f"Оригинал:\n{text_to_translate}\n\nПеревод ({target_lang}):\n{translated_text}"
-                     await bot.edit_message_text(fallback_text, chat_id=processing_msg.chat.id, message_id=processing_msg.message_id, parse_mode=None)
-                 except Exception as fallback_edit_err:
-                     logger.error(f"Failed to edit translation fallback: {fallback_edit_err}")
-                     await message.answer(response_text, parse_mode="MarkdownV2")
-        except Exception as e:
-             logger.error(f"Unexpected error editing translation message: {e}")
-             await message.answer(response_text, parse_mode="MarkdownV2")
-             try: await bot.delete_message(chat_id=processing_msg.chat.id, message_id=processing_msg.message_id)
-             except Exception: pass
-    else:
-        logger.error(f"Translation failed for user {user_id}. Fallback response: {translated_text}")
-        fail_message = translated_text if translated_text else "Не удалось выполнить перевод."
-        await bot.edit_message_text(fail_message, chat_id=processing_msg.chat.id, message_id=processing_msg.message_id, parse_mode=None)
+# <<< ФУНКЦИЯ handle_translate УДАЛЕНА >>>
 
 
 # ===========================================
@@ -509,13 +422,30 @@ async def handle_voice_message(message: Message, bot: Bot):
         await bot.send_chat_action(chat_id=message.chat.id, action="typing")
         response_text = await gemini.generate_text_response(user_id, recognized_text)
 
+        # --- ИЗМЕНЕНИЯ: Проверка на TTS маркер в ответе на ГОЛОСОВОЕ сообщение ---
         if response_text:
-            await database.add_message(user_id, 'model', response_text)
-            await send_response(bot, message.chat.id, user_id, response_text)
+            tts_marker_start = "[TTS:"
+            tts_marker_end = "]"
+            if response_text.startswith(tts_marker_start) and response_text.endswith(tts_marker_end):
+                text_to_speak = response_text[len(tts_marker_start):-len(tts_marker_end)]
+                if text_to_speak:
+                    logger.info(f"Detected explicit TTS request from Gemini (voice input) for user {user_id}.")
+                    await database.add_message(user_id, 'model', f"[Запрошена озвучка текста: '{text_to_speak[:100]}...']")
+                    await tts.speak_and_cleanup(bot, message.chat.id, text_to_speak)
+                else:
+                    logger.warning(f"Gemini returned TTS marker but text was empty (voice input) for user {user_id}")
+                    await message.reply("Не могу озвучить пустой текст.", parse_mode=None)
+                    await database.add_message(user_id, 'model', "[Ошибка: Gemini вернул пустой текст для озвучки]")
+            else:
+                # Обычный ответ (текстом или голосом в зависимости от /toggle_speak)
+                await database.add_message(user_id, 'model', response_text)
+                await send_response(bot, message.chat.id, user_id, response_text)
+
             try:
                 await bot.delete_message(chat_id=processing_msg.chat.id, message_id=processing_msg.message_id)
             except TelegramBadRequest as del_e: logger.warning(f"Could not delete processing message after voice reply: {del_e}")
             except Exception as del_e: logger.error(f"Unexpected error deleting processing message: {del_e}")
+        # --- КОНЕЦ ИЗМЕНЕНИЙ В ОТВЕТЕ НА ГОЛОС ---
         else:
             logger.error(f"Failed to generate Gemini response for recognized voice from user {user_id}")
             try:
@@ -658,19 +588,30 @@ async def handle_document_message(message: Message, bot: Bot):
     process_result = await file_handler.process_file(doc_filepath, filename, mime_type, file_size) # Удаление файла внутри
 
     if process_result:
-        status_message, analysis_result = process_result
+        status_message, analysis_result, extracted_content = process_result # Распаковываем 3 значения
         logger.info(f"File processing result for '{filename}': Status='{status_message}', Analysis received={analysis_result is not None}")
 
         response_parts = [
             f"**Файл:** `{escape_markdown_v2(filename)}`",
             f"**Статус:** {escape_markdown_v2(status_message)}"
         ]
+
+        # --- ИЗМЕНЕНИЕ: Формируем историю с урезанным контентом ---
+        max_history_len = settings.MAX_HISTORY_FILE_CONTENT_LENGTH
+        history_content_info = ""
+        if extracted_content and not status_message.startswith("Файл") and not status_message.startswith("Не удалось"):
+             if len(extracted_content) > max_history_len:
+                 history_content_info = f" [Содержимое (урезанное): {extracted_content[:max_history_len]}...]"
+             else:
+                 history_content_info = f" [Содержимое: {extracted_content[:max_history_len]}]" # Показываем все, если короткое
+        # --- КОНЕЦ ИЗМЕНЕНИЯ ИСТОРИИ ---
+
         user_history_message = f"[Отправлен файл для анализа: {filename}]"
-        model_history_message = f"[Статус обработки: {status_message}]"
+        model_history_message = f"[Статус обработки: {status_message}]{history_content_info}" # Добавляем инфо о контенте
 
         if analysis_result:
             response_parts.append(f"**Анализ содержимого \(Gemini\):**\n{escape_markdown_v2(analysis_result)}")
-            model_history_message += f" [Анализ Gemini: {analysis_result[:150]}...]"
+            model_history_message += f" [Анализ Gemini: {analysis_result[:150]}...]" # Добавляем инфо об анализе
 
         final_response = "\n\n".join(response_parts).strip()
         await database.add_message(user_id, 'user', user_history_message)
@@ -690,13 +631,14 @@ async def handle_document_message(message: Message, bot: Bot):
         await database.add_message(user_id, 'user', f"[Отправлен файл для анализа: {filename}]")
         await database.add_message(user_id, 'model', "[Критическая ошибка обработки файла]")
 
+
 # --- Обработчик Текстовых Сообщений ---
 @router.message(F.text)
 async def handle_text_message(message: Message, bot: Bot):
     """
     Handles regular text messages.
-    Checks if the message is a weather request (starts with 'погода ').
-    If not, processes it using Gemini.
+    Checks for weather request.
+    If not weather, processes using Gemini, detecting translation and TTS requests.
     """
     user_id = get_user_id(message=message)
     if not user_id: return
@@ -708,7 +650,7 @@ async def handle_text_message(message: Message, bot: Bot):
     lower_text = user_text.lower()
     weather_keyword = "погода "
 
-    # --- Проверка на запрос погоды ---
+    # --- Проверка на запрос погоды (остается без изменений) ---
     if lower_text.startswith(weather_keyword):
         city_input = user_text[len(weather_keyword):].strip()
         if not city_input:
@@ -755,22 +697,47 @@ async def handle_text_message(message: Message, bot: Bot):
 
     # --- Если это НЕ запрос погоды, обрабатываем через Gemini ---
     else:
-        logger.info(f"Received non-weather text message from user {user_id}: '{user_text[:100]}...'")
+        logger.info(f"Received text message from user {user_id} for Gemini: '{user_text[:100]}...'")
         await bot.send_chat_action(chat_id=message.chat.id, action="typing")
         await database.add_message(user_id, 'user', user_text)
         response_text = await gemini.generate_text_response(user_id, user_text)
 
         if response_text:
-            await database.add_message(user_id, 'model', response_text)
-            await send_response(bot, message.chat.id, user_id, response_text)
+            # --- НОВАЯ ЛОГИКА: Проверка на маркер TTS ---
+            tts_marker_start = "[TTS:"
+            tts_marker_end = "]"
+            if response_text.startswith(tts_marker_start) and response_text.endswith(tts_marker_end):
+                # Извлекаем текст для озвучки
+                text_to_speak = response_text[len(tts_marker_start):-len(tts_marker_end)]
+                if text_to_speak:
+                    logger.info(f"Detected explicit TTS request from Gemini for user {user_id}. Text: '{text_to_speak[:50]}...'")
+                    # Логируем действие в БД (не сам маркер)
+                    await database.add_message(user_id, 'model', f"[Запрошена озвучка текста: '{text_to_speak[:100]}...']")
+                    # Выполняем озвучку напрямую
+                    await tts.speak_and_cleanup(bot, message.chat.id, text_to_speak)
+                else:
+                    logger.warning(f"Gemini returned TTS marker but text was empty for user {user_id}")
+                    # Отправляем сообщение об ошибке, если текст пуст
+                    await message.reply("Не могу озвучить пустой текст.", parse_mode=None)
+                    await database.add_message(user_id, 'model', "[Ошибка: Gemini вернул пустой текст для озвучки]")
+
+            # --- СТАРАЯ ЛОГИКА: Если это не TTS маркер ---
+            else:
+                # Это обычный ответ или ответ с переводом от Gemini
+                await database.add_message(user_id, 'model', response_text)
+                # Отправляем ответ (текстом или голосом в зависимости от /toggle_speak)
+                await send_response(bot, message.chat.id, user_id, response_text)
+            # --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
         else:
+            # Обработка ошибки генерации Gemini (остается без изменений)
             logger.error(f"Failed to generate Gemini response for user {user_id}")
             error_response = "Извините, не могу сейчас ответить. Попробуйте позже."
             await message.reply(error_response, parse_mode=None)
             await database.add_message(user_id, 'model', "[Ошибка генерации ответа AI]")
 
 
-# --- Вспомогательная функция для отправки ответа ---
+# --- Вспомогательная функция для отправки ответа (без изменений) ---
 async def send_response(bot: Bot, chat_id: int, user_id: int, text: str, parse_mode: Optional[str] = None):
     """Sends response as text or voice based on user settings, handling long messages and errors."""
     text_to_send = text

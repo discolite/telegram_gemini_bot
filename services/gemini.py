@@ -1,3 +1,5 @@
+# --- START OF FILE services/gemini.py ---
+
 import google.generativeai as genai
 import PIL.Image
 import asyncio
@@ -42,7 +44,18 @@ async def generate_text_response(user_id: int, user_prompt: str) -> Optional[str
         history = await get_message_history(user_id)
 
         current_time_str = get_current_datetime_str()
-        system_instruction = f"Ты - ИИ-ассистент в Telegram. Отвечай на русском языке, если не указано иное. Учитывай предыдущие сообщения. Сегодня {current_time_str}."
+        # --- ИЗМЕНЕНИЯ В ИНСТРУКЦИИ ---
+        system_instruction = (
+            f"Ты - ИИ-ассистент в Telegram. Отвечай на русском языке, если не указано иное. "
+            f"Учитывай предыдущие сообщения. Сегодня {current_time_str}. "
+            f"ВАЖНО: Если пользователь явно просит тебя 'озвучить', 'сказать', 'произнести' какой-то текст "
+            f"(например: 'озвучь Привет мир', 'скажи Как дела?'), твой единственный ответ ДОЛЖЕН быть в формате "
+            f"`[TTS:Текст для озвучки]`, где 'Текст для озвучки' - это именно тот текст, который нужно озвучить. "
+            f"Не добавляй к этому маркеру НИКАКИХ других слов, пояснений или приветствий. "
+            f"Если пользователь просит перевести текст (например: 'переведи hello на русский'), выполни перевод. "
+            f"В остальных случаях отвечай на запрос как обычно."
+        )
+        # --- КОНЕЦ ИЗМЕНЕНИЙ В ИНСТРУКЦИИ ---
 
         if mood == "friendly": system_instruction += " Общайся дружелюбно и неформально."
         elif mood == "professional": system_instruction += " Общайся строго профессионально и формально."
@@ -64,7 +77,6 @@ async def generate_text_response(user_id: int, user_prompt: str) -> Optional[str
         # logger.debug(f"Gemini History: {gemini_history}")
         # logger.debug(f"Current prompt: {current_user_message}")
 
-        # <--- ИЗМЕНЕНИЕ: Добавляем логи до и после вызова --->
         logger.debug(f"Starting Gemini text generation in thread for user {user_id}...")
         response = await asyncio.to_thread(
             text_model.generate_content,
@@ -104,7 +116,6 @@ async def analyze_image_content(image_path: str, prompt: str = "Опиши, чт
         logger.info(f"Analyzing image using {settings.GEMINI_VISION_MODEL}: {image_path}")
         img = await asyncio.to_thread(PIL.Image.open, image_path)
 
-        # <--- ИЗМЕНЕНИЕ: Добавляем логи до и после вызова --->
         logger.debug(f"Starting Gemini vision analysis in thread for image {image_path}...")
         response = await asyncio.to_thread(
             vision_model.generate_content,
@@ -148,7 +159,6 @@ async def analyze_file_content(text_content: str, filename: str) -> Optional[str
     try:
         logger.debug(f"Sending file content analysis request ({settings.GEMINI_TEXT_MODEL}) for file: {filename}. Prompt size approx: {len(prompt)} chars.")
 
-        # <--- ИЗМЕНЕНИЕ: Добавляем логи до и после вызова --->
         logger.debug(f"Starting Gemini file analysis in thread for {filename}...")
         response = await asyncio.to_thread(
             text_model.generate_content,
@@ -189,7 +199,6 @@ async def translate_via_gemini(text: str, target_language: str) -> Optional[str]
     try:
         logger.info(f"Requesting translation via Gemini ({settings.GEMINI_TEXT_MODEL}) to '{target_language}'. Text length: {len(text)}")
 
-        # <--- ИЗМЕНЕНИЕ: Добавляем логи до и после вызова --->
         logger.debug(f"Starting Gemini translation in thread to {target_language}...")
         response = await asyncio.to_thread(
             text_model.generate_content,
@@ -216,3 +225,5 @@ async def translate_via_gemini(text: str, target_language: str) -> Optional[str]
         logger.error(f"Error translating text via Gemini: {e}")
         logger.exception(e)
         return "Произошла ошибка при переводе через AI"
+
+# --- END OF FILE services/gemini.py ---
