@@ -32,11 +32,11 @@ async def main():
 
     # --- Google Generative AI Configuration ---
     try:
-        if settings.GOOGLE_API_KEY:
-            genai.configure(api_key=settings.GOOGLE_API_KEY)
+        if settings.GEMINI_API_KEY:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
             logger.info("Google Generative AI configured successfully.")
         else:
-            logger.warning("GOOGLE_API_KEY not found in settings. Google AI features may not work.")
+            logger.warning("GEMINI_API_KEY not found in settings. Google AI features may not work.")
     except Exception as e:
         logger.critical(f"Failed to configure Google Generative AI: {e}")
         logger.exception(e)
