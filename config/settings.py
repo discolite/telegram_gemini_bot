@@ -86,7 +86,7 @@ GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-1.5-flash")
 # <<< КОНЕЦ УДАЛЕНИЯ/КОММЕНТИРОВАНИЯ Piper >>>
 
 # --- Other ---
-MAX_CONTEXT_MESSAGES = int(os.getenv("MAX_CONTEXT_MESSAGES", 10))
+MAX_CONTEXT_MESSAGES = int(os.getenv("MAX_CONTEXT_MESSAGES", 20))
 MAX_FILE_CONTENT_LENGTH_FOR_GEMINI = int(os.getenv("MAX_FILE_CONTENT_LENGTH_FOR_GEMINI", 30000))
 WEATHER_FORECAST_DEFAULT_DAYS = int(os.getenv("WEATHER_FORECAST_DEFAULT_DAYS", 5))
 # <<< НОВОЕ: Лимит символов файла для истории >>>
