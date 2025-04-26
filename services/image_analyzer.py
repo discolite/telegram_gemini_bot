@@ -1,5 +1,3 @@
-# /home/telegram_gemini_bot/services/image_analyzer.py
-
 import pytesseract
 from PIL import Image
 import asyncio
@@ -8,7 +6,7 @@ from loguru import logger
 from typing import Optional, Dict
 
 # Предполагается, что эта функция импортируется и работает корректно
-from services.gemini import analyze_image_content as analyze_with_gemini # Gemini Vision
+from services.gemini import analyze_image_content as analyze_with_gemini  # Gemini Vision
 from utils.helpers import cleanup_temp_file
 
 async def extract_text_from_image(image_path: Path) -> Optional[str]:
@@ -22,22 +20,23 @@ async def extract_text_from_image(image_path: Path) -> Optional[str]:
         # Синхронная функция для выполнения OCR
         def run_ocr():
             try:
-                # Указываем русский и английский языки, PSM 6 - предполагаем единый блок текста
+                # Открываем изображение
+                image = Image.open(image_path)
+                # Уменьшаем размер до 640x480 для ускорения
+                image = image.resize((480, 360), Image.Resampling.LANCZOS)
+                # Указываем русский и английский языки, PSM 6 - единый блок текста
                 custom_config = r'-l rus+eng --psm 6'
-                # Открываем изображение и распознаем текст
-                return pytesseract.image_to_string(Image.open(image_path), config=custom_config)
+                # Распознаем текст
+                return pytesseract.image_to_string(image, config=custom_config)
             except pytesseract.TesseractNotFoundError:
-                 # Критическая ошибка, если Tesseract не установлен
-                 logger.critical("Tesseract is not installed or not in PATH. OCR will not work.")
-                 return None
+                logger.critical("Tesseract is not installed or not in PATH. OCR will not work.")
+                return None
             except FileNotFoundError:
-                 # На случай, если файл удалился между проверкой и открытием
-                 logger.error(f"Image file disappeared before Tesseract could open it: {image_path}")
-                 return None
+                logger.error(f"Image file disappeared before Tesseract could open it: {image_path}")
+                return None
             except Exception as ocr_err:
-                 # Ловим другие ошибки Tesseract
-                 logger.error(f"Error during Tesseract OCR processing for {image_path}: {ocr_err}")
-                 return None
+                logger.error(f"Error during Tesseract OCR processing for {image_path}: {ocr_err}")
+                return None
 
         # Запускаем синхронную функцию OCR в отдельном потоке
         logger.debug(f"Starting Tesseract OCR in thread for {image_path}...")
@@ -46,14 +45,14 @@ async def extract_text_from_image(image_path: Path) -> Optional[str]:
 
         # Обрабатываем результат
         if text is not None:
-            extracted_text = text.strip() # Убираем лишние пробелы/переносы
+            extracted_text = text.strip()  # Убираем лишние пробелы/переносы
             if extracted_text:
                 logger.info(f"Text extracted (OCR) from {image_path} (length: {len(extracted_text)})")
                 return extracted_text
             else:
                 # Текст не найден, но OCR отработал без ошибок
                 logger.info(f"No text found (OCR) in image {image_path}")
-                return "" # Возвращаем пустую строку
+                return ""  # Возвращаем пустую строку
         else:
             # OCR завершился с ошибкой (None)
             logger.error(f"OCR processing failed for {image_path}")
@@ -65,7 +64,7 @@ async def extract_text_from_image(image_path: Path) -> Optional[str]:
     except Exception as e:
         # Ловим неожиданные ошибки на уровне обертки
         logger.error(f"Unexpected error during OCR text extraction wrapper ({image_path}): {e}")
-        logger.exception(e) # Логируем traceback
+        logger.exception(e)  # Логируем traceback
         return None
 
 async def analyze_image(image_path: Path, user_id: int) -> Dict[str, Optional[str]]:
@@ -88,19 +87,19 @@ async def analyze_image(image_path: Path, user_id: int) -> Dict[str, Optional[st
         # 1. Выполняем OCR (результат нужен для возврата и логов)
         ocr_text = await extract_text_from_image(image_path)
 
-        # 2. Формируем промпт для Gemini Vision БЕЗ OCR
-        # +++ ИЗМЕНЕНИЕ ЗДЕСЬ +++
-        vision_prompt = "Опиши это изображение подробно."
-        # Строки ниже закомментированы/удалены:
-        # if ocr_text: vision_prompt += f" На изображении также есть текст (результат OCR): '{ocr_text[:200]}...'"
-        # elif ocr_text == "": vision_prompt += " Текст на изображении не был обнаружен с помощью OCR."
-        # +++++++++++++++++++++++
+        # 2. Уменьшаем изображение для Gemini Vision
+        temp_small_path = image_path.with_name(f"small_{image_path.name}")
+        image = Image.open(image_path)
+        image = image.resize((480, 360), Image.Resampling.LANCZOS)
+        image.save(temp_small_path)
 
-        # 3. Вызываем Gemini Vision
-        logger.debug(f"Starting Gemini Vision analysis for {image_path}...")
-        # Передаем путь как строку
-        vision_analysis = await analyze_with_gemini(str(image_path), prompt=vision_prompt)
-        logger.debug(f"Finished Gemini Vision analysis for {image_path}.")
+        # 3. Формируем промпт для Gemini Vision БЕЗ OCR
+        vision_prompt = "Опиши это изображение подробно."
+
+        # 4. Вызываем Gemini Vision
+        logger.debug(f"Starting Gemini Vision analysis for {temp_small_path}...")
+        vision_analysis = await analyze_with_gemini(str(temp_small_path), prompt=vision_prompt)
+        logger.debug(f"Finished Gemini Vision analysis for {temp_small_path}.")
 
         # Логируем результат
         ocr_status = "Error" if ocr_text is None else ("Found" if ocr_text else "Not Found")
@@ -114,8 +113,10 @@ async def analyze_image(image_path: Path, user_id: int) -> Dict[str, Optional[st
         ocr_text = None
         vision_analysis = None
     finally:
-        # Очистка временного файла в любом случае (успех или ошибка)
+        # Очистка временных файлов в любом случае (успех или ошибка)
         await cleanup_temp_file(image_path)
+        if 'temp_small_path' in locals():
+            await cleanup_temp_file(temp_small_path)
 
     # Возвращаем словарь с результатами (OCR все еще возвращается, но не используется в промпте)
     return {"ocr_text": ocr_text, "vision_analysis": vision_analysis}

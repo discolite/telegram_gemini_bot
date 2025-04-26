@@ -1,13 +1,20 @@
-
-python-dotenv==1.0.0         # Для работы с .env файлами
-requests==2.28.1             # Для HTTP-запросов (например, к Gemini API, погодным сервисам)
-python-telegram-bot==20.0   # Для работы с Telegram Bot API
-google-api-python-client==2.91.0   # Для взаимодействия с Google Gemini API
-openai==0.27.0              # Для работы с OpenAI (если используется)
-Pillow==9.0.1               # Для работы с изображениями
-pytesseract==0.3.10         # Для OCR
-pandas==1.4.2               # Для работы с CSV/XLSX файлами
-gTTS==2.2.3                 # Для генерации речи (Text-to-Speech)
-SpeechRecognition==3.8.1    # Для распознавания речи
-sqlite3==2.6.0              # Для работы с SQLite
-flask==2.1.0                # Если используется для авторизации или веб-сервиса
+aiogram>=3.13.1              # Асинхронный фреймворк для Telegram Bot API
+google-generativeai>=0.8.3   # Для работы с Google Gemini API
+python-dotenv>=1.0.1        # Загрузка переменных окружения из .env
+aiohttp>=3.10.5             # Асинхронные HTTP-запросы
+pandas>=2.2.3               # Обработка данных (CSV, XLSX)
+openpyxl>=3.1.5             # Поддержка .xlsx в pandas
+PyPDF2>=3.0.1               # Обработка PDF-файлов
+pytesseract>=0.3.10         # OCR (оптическое распознавание текста, требует tesseract-ocr)
+Pillow>=10.4.0              # Обработка изображений для OCR и Gemini Vision
+SpeechRecognition>=3.10.4   # Распознавание речи (требует portaudio19-dev)
+pydub>=0.25.1               # Обработка аудио (требует ffmpeg)
+loguru>=0.7.2               # Логирование
+aiosqlite>=0.20.0           # Асинхронная работа с SQLite
+gTTS>=2.5.3                 # Генерация речи (Text-to-Speech)
+googletrans==4.0.0rc1       # Перевод текста (стабильная версия)
+opencv-python-headless>=4.10.0  # Обработка изображений (без GUI)
+PyMuPDF>=1.24.10            # Быстрая обработка PDF
+xlrd>=2.0.1                 # Поддержка .xls в pandas
+python-pptx>=1.0.2          # Обработка .pptx файлов
+python-docx>=1.1.2          # Обработка .docx файлов
