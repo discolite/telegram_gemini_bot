@@ -25,7 +25,7 @@ telegram_gemini_bot/
 1. Клонировать репозиторий:
 
    ```bash
-   git clone https://github.com/username/telegram_gemini_bot.git
+   git clone https://github.com/discolite/telegram_gemini_bot.git
    cd telegram_gemini_bot
    ```
 
@@ -39,17 +39,17 @@ telegram_gemini_bot/
 
 3. Установите зависимости:
 
-   ```bash
+
    pip install -r requirements.txt
-   ```
+
 
 4. Создайте файл `.env` на основе примера в `.env.example` и заполните его необходимыми ключами (например, API ключи, токены).
 
 5. Запустите бота:
 
-   ```bash
+ 
    python main.py
-   ```
+ 
 
 ## Разработка
 
