@@ -1,13 +1,23 @@
-# Telegram Gemini Bot
+<div align="center">
+  
+  <h1>🤖 Telegram Gemini Bot</h1>
+  
+  <p>Многофункциональный ИИ-бот для Telegram, который понимает текст, голос, изображения и документы.</p>
+  
+  <img src="https://img.shields.io/badge/Python-3.11-blue?logo=python">
+  <img src="https://img.shields.io/badge/Aiogram-3.x-lightgrey?logo=telegram">
+  <img src="https://img.shields.io/badge/Status-Active-brightgreen">
+  
+</div>
 
-![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
-![Aiogram](https://img.shields.io/badge/Aiogram-3.x-lightgrey?logo=telegram)
-![Status](https://img.shields.io/badge/Status-Active-brightgreen)
+---
+
+# 📋 Описание
 
 Многофункциональный Telegram-бот с поддержкой текста, голоса, изображений и файлов, использующий Google Gemini AI и другие сервисы.
 
 ## 🚀 Основные возможности
-- Ответы с ИИ (Google Gemini 1.5 Pro).
+- Ответы с ИИ (Google Gemini).
 - Распознавание речи и преобразование голосовых сообщений в текст.
 - Анализ изображений (OCR и Vision API).
 - Работа с текстовыми, PDF, CSV, Excel файлами.
@@ -55,9 +65,5 @@ python main.py
 - `/utils` — вспомогательные функции
 - `main.py` — стартовый скрипт
 - `requirements.txt` — зависимости проекта
-
----
-
-> **Примечание**: лицензия удалена по решению автора.
 
 ---
