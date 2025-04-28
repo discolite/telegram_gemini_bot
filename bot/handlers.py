@@ -98,7 +98,7 @@ async def handle_start(message: Message):
 async def handle_weather(message: Message, command: CommandObject, bot: Bot):
     user_id = get_user_id(message=message)
     if not user_id: return
-    city_input = command.args if command.args else "Moscow"
+    city_input = command.args if command.args else "Осиповичи"
     logger.info(f"User {user_id} requested weather for '{city_input}' using /weather command")
     processing_msg = await message.reply(f"<i>Узнаю погоду для '{escape_html(city_input)}'...</i>", parse_mode=ParseMode.HTML)
 
@@ -480,7 +480,7 @@ async def handle_text_message(message: Message, bot: Bot):
 
     # --- Проверка на погоду ---
     if lower_text.startswith(weather_keyword):
-        city_input = user_text[len(weather_keyword):].strip() or "Moscow"
+        city_input = user_text[len(weather_keyword):].strip() or "Осиповичи"
         logger.info(f"User {user_id} requested weather for '{city_input}' via text")
         processing_msg = await message.reply(f"<i>Узнаю погоду для '{escape_html(city_input)}'...</i>", parse_mode=ParseMode.HTML)
         weather_report_markdown = await weather.get_weather(city_input)
