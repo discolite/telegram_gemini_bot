@@ -34,7 +34,14 @@
 
 ## Установка на Ubuntu 24.04
 
+<<<<<<< HEAD
 **1. Системные зависимости:**
+=======
+   ```bash
+   git clone https://github.com/discolite/telegram_gemini_bot.git
+   cd telegram_gemini_bot
+   ```
+>>>>>>> 3cf87d3b846be54ddd690107932bde8a9a0bb20e
 
 ```bash
 sudo apt update && sudo apt upgrade -y
@@ -45,12 +52,38 @@ sudo apt install -y python3.11 python3.11-venv python3-pip git
 # Установка Tesseract OCR с русским и английским языками
 sudo apt install -y tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng
 
+<<<<<<< HEAD
 # Установка ffmpeg (для обработки аудио - pydub)
 sudo apt install -y ffmpeg
+=======
+
+   pip install -r requirements.txt
+
+>>>>>>> 3cf87d3b846be54ddd690107932bde8a9a0bb20e
 
 # Установка PortAudio (может потребоваться для SpeechRecognition, если не использовать только Google API)
 # sudo apt install -y portaudio19-dev
 
+<<<<<<< HEAD
 # Проверка установки Tesseract
 tesseract --version
 tesseract --list-langs | grep -E 'rus|eng' # Должен показать rus и eng
+=======
+5. Запустите бота:
+
+ 
+   python main.py
+ 
+
+## Разработка
+
+Для разработки и тестирования используйте виртуальное окружение. Все изменения в коде необходимо тестировать на локальном сервере, прежде чем отправлять в основной репозиторий.
+
+## Логирование
+
+Логи бота хранятся в директории `logs/` в файле `bot.log`.
+
+## Лицензия
+
+Этот проект лицензируется под лицензией MIT. См. файл LICENSE для подробностей.
+>>>>>>> 3cf87d3b846be54ddd690107932bde8a9a0bb20e
